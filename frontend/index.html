@@ -1,1 +1,29 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pi Auto Withdrawal Bot - Live</title>
+  <style>
+    body { font-family: Arial; margin: 10px; background: #f0f0f0; }
+    h2 { text-align: center; }
+    input, textarea, button {
+      width: 100%; margin: 10px 0; padding: 12px; font-size: 16px;
+      border-radius: 8px; border: 1px solid #ccc;
+    }
+    button { background: #4CAF50; color: white; border: none; cursor: pointer; }
+    #statusLog { background: white; padding: 10px; max-height: 300px; overflow-y: auto; border-radius: 8px; }
+    .success { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h2>🚀 Optimized Pi Auto Withdrawal (Live Status)</h2>
+  <input id="passphrase" type="password" placeholder="Sender Passphrase" />
+  <input id="amount" type="text" placeholder="Amount (e.g. 0.01)" />
+  <textarea id="receivers" rows="8" placeholder="Receiver addresses, one per line"></textarea>
+  <button onclick="submit()">Send Pi</button>
+  <div id="statusLog"></div>
+  <script src="script.js"></script>
+</body>
+</html>
