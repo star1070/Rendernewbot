@@ -6,6 +6,10 @@ const bodyParser = require("body-parser");
 
 const app = express();
 app.use(bodyParser.json());
+const path = require("path");
+
+// Serve frontend folder
+app.use("/frontend", express.static(path.join(__dirname, "../frontend")));
 
 // Pi Network Horizon server
 const server = new Server("https://api.mainnet.minepi.com");
