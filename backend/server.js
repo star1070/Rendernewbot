@@ -8,7 +8,7 @@ const path = require("path");
 const app = express();
 app.use(bodyParser.json());
 
-// Serve frontend files on root URL
+// Serve frontend at root URL
 app.use(express.static(path.join(__dirname, "../frontend")));
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "../frontend/index.html"));
@@ -24,9 +24,9 @@ function getKeypairFromPassphrase(mnemonic) {
   return Keypair.fromRawEd25519Seed(key);
 }
 
-// Utility delay for retries
+// Delay utility for retries
 function delay(ms) {
-  return new Promise(res => setTimeout(res, ms));
+  return new Promise((res) => setTimeout(res, ms));
 }
 
 // Send single transaction with retry
@@ -35,7 +35,7 @@ async function sendTransaction(sender, to, amount) {
   while (attempts > 0) {
     try {
       const account = await server.loadAccount(sender.publicKey());
-      const balances = account.balances.find(b => b.asset_type === "native");
+      const balances = account.balances.find((b) => b.asset_type === "native");
       const totalBalance = parseFloat(balances.balance);
       const locked = parseFloat(balances?.limit || "0");
       const available = totalBalance - locked;
@@ -46,26 +46,27 @@ async function sendTransaction(sender, to, amount) {
 
       const tx = new TransactionBuilder(account, {
         fee: await server.fetchBaseFee(),
-        networkPassphrase: "Pi Mainnet"
+        networkPassphrase: "Pi Mainnet",
       })
-        .addOperation(Operation.payment({
-          destination: to,
-          asset: Asset.native(),
-          amount: amount
-        }))
+        .addOperation(
+          Operation.payment({
+            destination: to,
+            asset: Asset.native(),
+            amount: amount,
+          })
+        )
         .setTimeout(30)
         .build();
 
       tx.sign(sender);
       const result = await server.submitTransaction(tx);
       return { to, success: true, hash: result.hash };
-
     } catch (e) {
       attempts--;
       if (attempts === 0) {
         return { to, success: false, error: e.message };
       }
-      await delay(300 + Math.random() * 400);
+      await delay(300 + Math.random() * 400); // retry delay
     }
   }
 }
@@ -76,12 +77,17 @@ app.post("/submit-parallel", async (req, res) => {
   try {
     const sender = getKeypairFromPassphrase(passphrase);
     const results = await Promise.all(
-      receivers.map(to => sendTransaction(sender, to.trim(), amount))
+      receivers.map((to) => sendTransaction(sender, to.trim(), amount))
     );
     res.json({ success: true, results });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// Catch-all route for SPA support
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../frontend/index.html"));
 });
 
 // Start server
