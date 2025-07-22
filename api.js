@@ -6,7 +6,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.use(bodyParser.json());
-app.use(express.static('public')); // Static files serve करेगा
+app.use(express.static('public')); // Static files
 
 // Private Horizon servers pool
 const HORIZON_SERVERS = [
@@ -23,7 +23,7 @@ const HORIZON_SERVERS = [
 
 function getFastServer() {
   const url = HORIZON_SERVERS[Math.floor(Math.random() * HORIZON_SERVERS.length)];
-  console.log(`Using Horizon node: ${url}`);
+  console.log(`[API] Using Horizon node: ${url}`);
   return new Server(url);
 }
 
@@ -32,24 +32,31 @@ async function submitWithRetry(server, transaction, retries = 5) {
     try {
       return await server.submitTransaction(transaction);
     } catch (e) {
-      console.log(`Submit failed (${retries} retries left):`, e.response?.data || e.message);
+      console.log(`[API] Submit failed (${retries} retries left):`, e.response?.data || e.message);
       retries--;
       if (retries === 0) throw e;
     }
   }
 }
 
+function sendJSON(res, data) {
+  const jsonString = JSON.stringify(data);
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Length', Buffer.byteLength(jsonString));
+  res.status(200).send(jsonString);
+}
+
 app.post('/submitTransaction', async (req, res) => {
+  const { xdr } = req.body;
+
+  if (!xdr) {
+    return sendJSON(res, { success: false, error: 'Missing signed XDR' });
+  }
+
   try {
-    const { xdr } = req.body;
-
-    if (!xdr) {
-      return res.status(400).json({ success: false, error: 'Missing signed XDR' });
-    }
-
     const server = getFastServer();
 
-    // Batch XDR array support
+    // Batch array
     if (Array.isArray(xdr)) {
       const results = await Promise.allSettled(
         xdr.map(async (tx, index) => {
@@ -58,40 +65,27 @@ app.post('/submitTransaction', async (req, res) => {
             const result = await submitWithRetry(server, transaction, 5);
             return { index, success: true, result };
           } catch (e) {
-            return {
-              index,
-              success: false,
-              error: e.message,
-              raw: e.response?.data || null
-            };
+            return { index, success: false, error: e.message, raw: e.response?.data || null };
           }
         })
       );
-      return res.json({ success: true, batch: results });
+      return sendJSON(res, { success: true, batch: results });
     }
 
-    // Single XDR
+    // Single transaction
     try {
       const transaction = new Transaction(xdr, 'Pi Mainnet');
       const response = await submitWithRetry(server, transaction, 5);
-      return res.json({ success: true, result: response });
+      return sendJSON(res, { success: true, result: response });
     } catch (e) {
-      return res.status(200).json({
-        success: false,
-        error: e.message,
-        raw: e.response?.data || null
-      });
+      return sendJSON(res, { success: false, error: e.message, raw: e.response?.data || null });
     }
-
   } catch (e) {
-    console.error("API Fatal Error:", e);
-    return res.status(200).json({
-      success: false,
-      error: e.message || 'Unknown fatal error'
-    });
+    console.error('[API] Fatal Error:', e);
+    return sendJSON(res, { success: false, error: e.message || 'Unknown fatal error' });
   }
 });
 
 app.listen(port, () => {
-  console.log(`Debug-enabled API running on port ${port}`);
+  console.log(`[API] Running on port ${port}`);
 });
