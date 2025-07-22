@@ -1,19 +1,13 @@
 {
-  "name": "pi-auto-withdrawal-bot",
+  "name": "pibotsnew",
   "version": "1.0.0",
-  "description": "Superfast Pi Network Auto Withdrawal Bot",
-  "main": "backend/server.js",
+  "main": "api.js",
   "scripts": {
-    "start": "node backend/server.js"
+    "start": "node api.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "stellar-sdk": "^10.4.0",
-    "bip39": "^3.0.4",
-    "ed25519-hd-key": "^1.2.0",
-    "body-parser": "^1.20.2"
-  },
-  "engines": {
-    "node": ">=16.x"
+    "express": "^4.19.2",
+    "body-parser": "^1.20.2",
+    "stellar-sdk": "10.4.1"
   }
 }
