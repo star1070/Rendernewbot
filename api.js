@@ -8,21 +8,21 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.use(bodyParser.json());
-app.use(express.static('public')); // Serve frontend
+app.use(express.static('public')); // Frontend serve करेगा
 
-// Horizon server
+// Horizon server config
 const HORIZON_URL = 'https://api.mainnet.minepi.com';
 const server = new Server(HORIZON_URL);
 const NETWORK_PASSPHRASE = 'Pi Network';
 
-// Passphrase → Keypair
+// Passphrase से Keypair generate करने का function
 function generateWalletKeypair(passphrase) {
   const seed = mnemonicToSeedSync(passphrase.toLowerCase().trim());
   const { key } = derivePath("m/44'/314159'/0'", seed.toString('hex'));
   return Keypair.fromRawEd25519Seed(key);
 }
 
-// API: Claim and transfer locked balance
+// API endpoint: Claim और transfer
 app.post('/transfer', async (req, res) => {
   try {
     const { passphrase, receiver, balanceId, amount } = req.body;
@@ -31,10 +31,11 @@ app.post('/transfer', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
+    // Keypair और account load
     const senderKp = generateWalletKeypair(passphrase);
     const sourceAccount = await server.loadAccount(senderKp.publicKey());
 
-    // Create transaction with claim + payment ops
+    // Transaction build
     const tx = new TransactionBuilder(sourceAccount, {
       fee: (parseInt(await server.fetchBaseFee(), 10) + 100).toString(),
       networkPassphrase: NETWORK_PASSPHRASE,
@@ -48,9 +49,10 @@ app.post('/transfer', async (req, res) => {
       .setTimeout(30)
       .build();
 
+    // Sign और submit
     tx.sign(senderKp);
-
     const response = await server.submitTransaction(tx);
+
     res.json({ success: true, txHash: response.hash, result: response });
   } catch (error) {
     console.error('[API] Transfer Error:', error.response?.data || error.message);
@@ -62,6 +64,7 @@ app.post('/transfer', async (req, res) => {
   }
 });
 
+// Server start
 app.listen(port, () => {
   console.log(`API running on port ${port}`);
 });
