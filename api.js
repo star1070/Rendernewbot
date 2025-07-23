@@ -1,30 +1,45 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
-const { Server, Transaction } = require('stellar-sdk');
+const { Server, TransactionBuilder, Operation, Keypair, Asset } = require('stellar-sdk');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Middleware
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Pi Network transaction submit endpoint
+// Endpoint to create + sign + submit transaction
 app.post('/submitTransaction', async (req, res) => {
   try {
-    const { xdr } = req.body;
-    if (!xdr) {
-      return res.status(400).json({ success: false, error: 'Missing signed XDR' });
+    const { senderSecret, receiver, amount } = req.body;
+    if (!senderSecret || !receiver || !amount) {
+      return res.status(400).json({ success: false, error: 'Missing parameters' });
     }
 
     const server = new Server('https://api.mainnet.minepi.com');
-    const transaction = new Transaction(xdr, 'Pi Mainnet');
+    const sourceKeypair = Keypair.fromSecret(senderSecret);
+    const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
+    const fee = await server.fetchBaseFee();
+
+    const transaction = new TransactionBuilder(sourceAccount, {
+      fee,
+      networkPassphrase: 'Pi Mainnet'
+    })
+      .addOperation(Operation.payment({
+        destination: receiver,
+        asset: Asset.native(),
+        amount: amount
+      }))
+      .setTimeout(30)
+      .build();
+
+    transaction.sign(sourceKeypair);
     const response = await server.submitTransaction(transaction);
 
-    return res.json({ success: true, result: response });
+    res.json({ success: true, result: response });
   } catch (error) {
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: error.message,
       reason: error.response?.data?.extras?.result_codes || 'Unknown error'
@@ -32,12 +47,11 @@ app.post('/submitTransaction', async (req, res) => {
   }
 });
 
-// SPA fallback for React/Next.js routing
+// Serve frontend
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start server
 app.listen(PORT, () => {
-  console.log(`Backend API running on port ${PORT}`);
+  console.log(`API running on port ${PORT}`);
 });
