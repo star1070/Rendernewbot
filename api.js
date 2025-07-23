@@ -5,44 +5,29 @@ const { Server, Transaction } = require('stellar-sdk');
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Horizon nodes for failover
-const horizonNodes = [
-  'https://api.mainnet.minepi.com',
-  'https://horizon.stellar.org'
-];
-
 app.use(bodyParser.json());
-app.use(express.static('public')); // for frontend
+app.use(express.static('public'));  // frontend serve karega
 
-// Utility to pick fastest Horizon node
-async function getFastServer() {
-  for (const node of horizonNodes) {
-    try {
-      const server = new Server(node, { allowHttp: false });
-      await server.ledgers().limit(1).call();
-      console.log(`[API] Using Horizon node: ${node}`);
-      return server;
-    } catch (e) {
-      console.warn(`[API] Node failed: ${node}`);
-    }
-  }
-  throw new Error('All Horizon nodes unavailable');
-}
-
+// Transaction submit endpoint
 app.post('/submitTransaction', async (req, res) => {
   try {
     const { xdr } = req.body;
+
     if (!xdr) {
       return res.status(400).json({ success: false, error: 'Missing signed XDR' });
     }
 
-    const server = await getFastServer();
+    console.log('[API] Received XDR:', xdr.slice(0, 40) + '...');
+
+    const server = new Server('https://api.mainnet.minepi.com');
     const transaction = new Transaction(xdr, 'Pi Mainnet');
+
     const response = await server.submitTransaction(transaction);
 
+    console.log('[API] Transaction Success:', response.hash);
     res.json({ success: true, result: response });
   } catch (e) {
-    console.error('[API] Submit error:', e.message);
+    console.error('[API] SubmitTransaction Error:', e.message);
     res.status(500).json({
       success: false,
       error: e.message,
