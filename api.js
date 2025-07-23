@@ -1,72 +1,35 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const { Server, TransactionBuilder, Networks, Operation, Asset, Keypair, Transaction } = require('stellar-sdk');
-const { mnemonicToSeedSync } = require('bip39');
-const { derivePath } = require('ed25519-hd-key');
+const path = require('path');
+const { Server, Transaction } = require('stellar-sdk');
 
 const app = express();
-const port = process.env.PORT || 10000;
+const PORT = process.env.PORT || 10000;
 
+// Middleware
 app.use(bodyParser.json());
-app.use(express.static('public'));
 
-const HORIZON_URL = 'https://api.mainnet.minepi.com';
-const NETWORK_PASSPHRASE = 'Pi Network';
-const server = new Server(HORIZON_URL);
+// Serve frontend build
+app.use(express.static(path.join(__dirname, 'public')));
 
-function generateWalletKeypair(passphrase) {
-  const seed = mnemonicToSeedSync(passphrase.toLowerCase().trim());
-  const { key } = derivePath("m/44'/314159'/0'", seed.toString('hex'));
-  return Keypair.fromRawEd25519Seed(key);
-}
-
-// Old endpoint for frontend compatibility
+// Pi Network transaction submit endpoint
 app.post('/submitTransaction', async (req, res) => {
   try {
     const { xdr } = req.body;
-    if (!xdr) return res.status(400).json({ success: false, error: 'Missing signed XDR' });
-
-    const tx = new Transaction(xdr, NETWORK_PASSPHRASE);
-    const response = await server.submitTransaction(tx);
-
-    res.json({ success: true, txHash: response.hash, result: response });
-  } catch (e) {
-    console.error('[API /submitTransaction Error]:', e.response?.data || e.message);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-// New endpoint for direct passphrase-based transfer
-app.post('/transfer', async (req, res) => {
-  try {
-    const { passphrase, receiver, balanceId, amount } = req.body;
-    if (!passphrase || !receiver || !balanceId || !amount) {
-      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    if (!xdr) {
+      return res.status(400).json({ success: false, error: 'Missing signed XDR' });
     }
 
-    const senderKp = generateWalletKeypair(passphrase);
-    const sourceAccount = await server.loadAccount(senderKp.publicKey());
+    console.log("Received XDR:", xdr);
 
-    const tx = new TransactionBuilder(sourceAccount, {
-      fee: (parseInt(await server.fetchBaseFee(), 10) + 100).toString(),
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addOperation(Operation.claimClaimableBalance({ balanceId }))
-      .addOperation(Operation.payment({
-        destination: receiver,
-        asset: Asset.native(),
-        amount: amount.toString(),
-      }))
-      .setTimeout(30)
-      .build();
+    const server = new Server('https://api.mainnet.minepi.com');
+    const transaction = new Transaction(xdr, 'Pi Mainnet');
+    const response = await server.submitTransaction(transaction);
 
-    tx.sign(senderKp);
-    const response = await server.submitTransaction(tx);
-
-    res.json({ success: true, txHash: response.hash, result: response });
+    return res.json({ success: true, result: response });
   } catch (error) {
-    console.error('[API /transfer Error]:', error.response?.data || error.message);
-    res.status(500).json({
+    console.error("Transaction submission failed:", error);
+    return res.status(500).json({
       success: false,
       error: error.message,
       reason: error.response?.data?.extras?.result_codes || 'Unknown error'
@@ -74,6 +37,12 @@ app.post('/transfer', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`API running on port ${port}`);
+// Fallback for SPA routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Backend API running on port ${PORT}`);
 });
