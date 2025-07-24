@@ -1,8 +1,11 @@
 {
-  "name": "pi-auto-bot",
+  "name": "pi-network-transaction",
   "version": "1.0.0",
-  "description": "Pi Network transaction backend",
-  "main": "index.js",
+  "description": "Backend for Pi Network transaction submission",
+  "main": "netlify/functions/submitTransaction.js",
+  "scripts": {
+    "start": "netlify dev"
+  },
   "dependencies": {
     "stellar-sdk": "^10.4.1"
   }
