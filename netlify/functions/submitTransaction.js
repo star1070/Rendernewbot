@@ -1,18 +1,51 @@
-const { Server, Transaction } = require('stellar-sdk');
+const StellarSdk = require("stellar-sdk");
 
-exports.handler = async function(event) {
+exports.handler = async (event) => {
   try {
-    const { xdr } = JSON.parse(event.body);
-    if (!xdr) {
-      return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Missing signed XDR' }) };
+    const { senderSecret, receiverAddress, amount } = JSON.parse(event.body);
+
+    if (!senderSecret || !receiverAddress || !amount) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Missing required fields" }),
+      };
     }
 
-    const server = new Server('https://api.mainnet.minepi.com');
-    const transaction = new Transaction(xdr, 'Pi Mainnet');
-    const response = await server.submitTransaction(transaction);
+    const server = new StellarSdk.Server("https://api.mainnet.minepi.com");
 
-    return { statusCode: 200, body: JSON.stringify({ success: true, result: response }) };
+    // Load account
+    const sourceKeypair = StellarSdk.Keypair.fromSecret(senderSecret);
+    const account = await server.loadAccount(sourceKeypair.publicKey());
+
+    // Build transaction
+    const transaction = new StellarSdk.TransactionBuilder(account, {
+      fee: await server.fetchBaseFee(),
+      networkPassphrase: StellarSdk.Networks.PUBLIC,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: receiverAddress,
+          asset: StellarSdk.Asset.native(),
+          amount: amount.toString(),
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    // Sign
+    transaction.sign(sourceKeypair);
+
+    // Submit transaction
+    const result = await server.submitTransaction(transaction);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ success: true, result }),
+    };
   } catch (error) {
-    return { statusCode: 500, body: JSON.stringify({ success: false, error: error.message }) };
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ success: false, error: error.message }),
+    };
   }
 };
