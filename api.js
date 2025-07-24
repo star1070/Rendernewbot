@@ -1,7 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
-const { Server, TransactionBuilder, Operation, Keypair, Asset } = require('stellar-sdk');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -9,42 +8,17 @@ const PORT = process.env.PORT || 10000;
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Endpoint to create + sign + submit transaction
-app.post('/submitTransaction', async (req, res) => {
-  try {
-    const { senderSecret, receiver, amount } = req.body;
-    if (!senderSecret || !receiver || !amount) {
-      return res.status(400).json({ success: false, error: 'Missing parameters' });
-    }
+// Diagnostic endpoint
+app.post('/submitTransaction', (req, res) => {
+  console.log('Received POST /submitTransaction');
+  console.log('Request body:', req.body);
 
-    const server = new Server('https://api.mainnet.minepi.com');
-    const sourceKeypair = Keypair.fromSecret(senderSecret);
-    const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
-    const fee = await server.fetchBaseFee();
-
-    const transaction = new TransactionBuilder(sourceAccount, {
-      fee,
-      networkPassphrase: 'Pi Mainnet'
-    })
-      .addOperation(Operation.payment({
-        destination: receiver,
-        asset: Asset.native(),
-        amount: amount
-      }))
-      .setTimeout(30)
-      .build();
-
-    transaction.sign(sourceKeypair);
-    const response = await server.submitTransaction(transaction);
-
-    res.json({ success: true, result: response });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      reason: error.response?.data?.extras?.result_codes || 'Unknown error'
-    });
+  if (!req.body || Object.keys(req.body).length === 0) {
+    console.log('No data received from frontend.');
   }
+
+  // Temporary response
+  res.json({ success: true, received: req.body });
 });
 
 // Serve frontend
@@ -53,5 +27,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`API running on port ${PORT}`);
+  console.log(`Diagnostic API running on port ${PORT}`);
 });
