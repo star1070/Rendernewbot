@@ -1,13 +1,2 @@
-# File: netlify.toml
-
-# ▼▼▼ यह बिल्ड सेक्शन जोड़ें ▼▼▼
-[build]
-  # यह कमांड Netlify को बताता है कि आपके प्रोजेक्ट को कैसे बनाना है
-  command = "npm run build"
-  
-  # यह बताता है कि बिल्ड होने के बाद तैयार वेबसाइट किस फोल्डर में है
-  publish = ".next"
-
-# ▼▼▼ यह फंक्शन्स वाला सेक्शन पहले से होना चाहिए ▼▼▼
 [functions]
   directory = "netlify/functions"
