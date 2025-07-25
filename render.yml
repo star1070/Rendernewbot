@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: bardflasher-app
+    env: node
+    plan: free
+    buildCommand: "npm install"
+    startCommand: "node server.js"
+    staticPublishPath: "./public" # यह लाइन 'public' फोल्डर को स्टैटिक साइट की तरह सर्व करेगी
