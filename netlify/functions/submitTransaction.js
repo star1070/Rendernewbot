@@ -1,82 +1,24 @@
-// File: netlify/functions/submitTransaction.js (Updated & Corrected Version)
+// File: netlify/functions/submitTransaction.js (Final Version)
 
 const { Keypair, Horizon, Operation, TransactionBuilder, Asset } = require('stellar-sdk');
 const { mnemonicToSeedSync } = require('bip39');
 const { derivePath } = require('ed25519-hd-key');
 const axios = require('axios');
 
-const servers = [];
-for (let i = 0; i < 10; i++) {
-    const httpClient = axios.create({ timeout: 25000 + 2000 * i });
-    const server = new Horizon.Server("https://api.mainnet.minepi.com", { httpClient });
-    servers.push(server);
-}
-const getRandomServer = () => servers[Math.floor(Math.random() * servers.length)];
+const server = new Horizon.Server("https://api.mainnet.minepi.com", {
+    httpClient: axios.create({ timeout: 30000 }) // टाइमआउट 30 सेकंड कर दिया है
+});
 
 const createKeypairFromMnemonic = (mnemonic) => {
-    const seed = mnemonicToSeedSync(mnemonic);
-    const derivedSeed = derivePath("m/44'/314159'/0'", seed.toString('hex'));
-    return Keypair.fromRawEd25519Seed(derivedSeed.key);
-};
-
-const initiateTransaction = async (sponsorKeypair, senderKeypair, recipientAddress, balanceId, amount, recordsPerAttempt, customFee, useAutomaticFee, useSponsor, doClaim) => {
-    const server = getRandomServer();
-    recordsPerAttempt = recordsPerAttempt < 1 ? 1 : recordsPerAttempt;
-
     try {
-        const sourcePublicKey = useSponsor ? sponsorKeypair.publicKey() : senderKeypair.publicKey();
-        const account = await server.loadAccount(sourcePublicKey);
-        
-        let fee;
-        if(useAutomaticFee) {
-            fee = await server.fetchBaseFee();
-        } else {
-            fee = parseInt(customFee * 10000000);
-        }
-
-        const numOperations = doClaim ? 2 * recordsPerAttempt : 1 * recordsPerAttempt;
-        const totalFee = (parseInt(fee) * numOperations).toString();
-        
-        const tx = new TransactionBuilder(account, {
-            fee: totalFee,
-            networkPassphrase: "Pi Network",
-        });
-
-        for (let i = 0; i < recordsPerAttempt; i++) {
-            if (doClaim) {
-                tx.addOperation(Operation.claimClaimableBalance({
-                    balanceId: balanceId,
-                    source: senderKeypair.publicKey()
-                }));
-            }
-            const paymentOp = {
-                destination: recipientAddress,
-                asset: Asset.native(),
-                amount: amount.toString(),
-                source: doClaim || useSponsor ? senderKeypair.publicKey() : undefined
-            };
-            tx.addOperation(Operation.payment(paymentOp));
-        }
-
-        const transaction = tx.setTimeout(60).build();
-
-        if (useSponsor) {
-            transaction.sign(sponsorKeypair);
-        }
-        transaction.sign(senderKeypair);
-
-        const result = await server.submitTransaction(transaction);
-        return { isSuccess: true, result };
-
-    } catch (error) {
-        return { isSuccess: false, error };
+        return Keypair.fromRawEd25519Seed(derivePath("m/44'/314159'/0'", mnemonicToSeedSync(mnemonic).toString('hex')).key);
+    } catch (e) {
+        throw new Error("Invalid keyphrase. Please check for typos or extra spaces.");
     }
 };
 
 exports.handler = async (event) => {
-    if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: JSON.stringify({ message: "Method Not Allowed" })};
-    }
+    if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
     try {
         const params = JSON.parse(event.body);
@@ -86,43 +28,63 @@ exports.handler = async (event) => {
             sponsorKeypair = createKeypairFromMnemonic(params.sponsorMnemonic);
         }
 
-        const txResult = await initiateTransaction(
-            sponsorKeypair,
-            senderKeypair,
-            params.receiverAddress,
-            params.claimableId,
-            params.amount,
-            params.recordsPerAttempt,
-            params.customFee,
-            params.feeMechanism === 'AUTOMATIC',
-            params.feeType === 'SPONSOR_PAYS',
-            params.operation === 'claim_and_transfer'
-        );
+        // ▼▼▼ अकाउंट और फीस की जानकारी यहाँ लोड हो रही है ▼▼▼
+        const sourceAccountKeypair = (params.feeType === 'SPONSOR_PAYS') ? sponsorKeypair : senderKeypair;
+        const accountToLoad = await server.loadAccount(sourceAccountKeypair.publicKey());
+        const fee = await server.fetchBaseFee();
+        
+        const tx = new TransactionBuilder(accountToLoad, {
+            fee,
+            networkPassphrase: "Pi Network",
+        });
 
-        // ▼▼▼ यहाँ हमने लॉजिक को ठीक किया है ▼▼▼
-        const isTrulySuccessful = txResult.isSuccess && txResult.result && txResult.result.hash;
+        if (params.operation === 'claim_and_transfer') {
+            tx.addOperation(Operation.claimClaimableBalance({
+                balanceId: params.claimableId,
+                source: senderKeypair.publicKey()
+            }));
+        }
+        
+        tx.addOperation(Operation.payment({
+            destination: params.receiverAddress,
+            asset: Asset.native(),
+            amount: params.amount.toString(),
+            source: senderKeypair.publicKey()
+        }));
 
-        if (isTrulySuccessful) {
-            // असली सफलता तभी भेजें जब हैश मिला हो
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ success: true, response: txResult.result })
-            };
+        const transaction = tx.setTimeout(60).build();
+        transaction.sign(senderKeypair);
+        if (params.feeType === 'SPONSOR_PAYS') {
+            transaction.sign(sponsorKeypair);
+        }
+        
+        const result = await server.submitTransaction(transaction);
+
+        // असली सफलता तभी है जब हैश मिले
+        if (result && result.hash) {
+             return { statusCode: 200, body: JSON.stringify({ success: true, response: result }) };
         } else {
-            // वरना, विफलता का कारण भेजें
-            const errorDetails = txResult.error?.response?.data?.extras?.result_codes || txResult.error?.message || "Unknown transaction error";
-            return {
-                statusCode: 200, // हम 200 भेज रहे हैं क्योंकि यह सर्वर एरर नहीं है, बल्कि ट्रांजैक्शन एरर है
-                body: JSON.stringify({ success: false, error: errorDetails })
-            };
+            throw new Error("Transaction was submitted but no hash was returned.");
         }
 
     } catch (error) {
-        // यह तब चलेगा जब कोड में ही कोई और बड़ी गलती हो
-        console.error("Critical Handler Error:", error);
+        // ▼▼▼ मजबूत एरर हैंडलिंग ▼▼▼
+        console.error("Error in submitTransaction:", error);
+        let detailedError = "An unknown error occurred during transaction.";
+        
+        if (error.response && error.response.data && error.response.data.extras && error.response.data.extras.result_codes) {
+            detailedError = "Transaction Failed: " + JSON.stringify(error.response.data.extras.result_codes);
+        } else if (error.response && error.response.status === 404) {
+            detailedError = "The sender or sponsor account was not found on the Pi network.";
+        } else if (error.message.toLowerCase().includes('timeout')) {
+            detailedError = "Request to Pi network timed out. The network may be busy. Please try again.";
+        } else {
+            detailedError = error.message;
+        }
+
         return {
-            statusCode: 500,
-            body: JSON.stringify({ success: false, error: "A critical error occurred in the backend function." })
+            statusCode: 200,
+            body: JSON.stringify({ success: false, error: detailedError })
         };
     }
 };
