@@ -1,7 +1,6 @@
 {
   "name": "bardflasher-fullstack",
   "version": "1.0.0",
-  "description": "Fullstack application for BardFlasher with a backend proxy.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
