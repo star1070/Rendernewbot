@@ -1,18 +1,10 @@
-// File: netlify/functions/submitTransaction.js
+// File: netlify/functions/submitTransaction.js (Updated & Corrected Version)
 
-// ये लाइब्रेरी आपके प्रोजेक्ट में इंस्टॉल होनी चाहिए
-// टर्मिनल में चलाएँ: npm install stellar-sdk bip39 ed25519-hd-key axios
 const { Keypair, Horizon, Operation, TransactionBuilder, Asset } = require('stellar-sdk');
 const { mnemonicToSeedSync } = require('bip39');
 const { derivePath } = require('ed25519-hd-key');
 const axios = require('axios');
 
-// =================================================================
-// यह पूरा लॉजिक आपकी Project A की फाइल से लिया गया है
-// मैंने बस फंक्शन के नाम समझने लायक बना दिए हैं
-// =================================================================
-
-// Pi के API सर्वर से कनेक्ट करने के लिए सेटअप
 const servers = [];
 for (let i = 0; i < 10; i++) {
     const httpClient = axios.create({ timeout: 25000 + 2000 * i });
@@ -21,21 +13,19 @@ for (let i = 0; i < 10; i++) {
 }
 const getRandomServer = () => servers[Math.floor(Math.random() * servers.length)];
 
-// की-फ्रेज (mnemonic) से की-पेयर बनाने वाला फंक्शन
 const createKeypairFromMnemonic = (mnemonic) => {
     const seed = mnemonicToSeedSync(mnemonic);
     const derivedSeed = derivePath("m/44'/314159'/0'", seed.toString('hex'));
     return Keypair.fromRawEd25519Seed(derivedSeed.key);
 };
 
-// ट्रांजैक्शन शुरू करने वाला मुख्य फंक्शन
 const initiateTransaction = async (sponsorKeypair, senderKeypair, recipientAddress, balanceId, amount, recordsPerAttempt, customFee, useAutomaticFee, useSponsor, doClaim) => {
     const server = getRandomServer();
     recordsPerAttempt = recordsPerAttempt < 1 ? 1 : recordsPerAttempt;
 
     try {
-        const sourceAccount = useSponsor ? sponsorKeypair.publicKey() : senderKeypair.publicKey();
-        const account = await server.loadAccount(sourceAccount);
+        const sourcePublicKey = useSponsor ? sponsorKeypair.publicKey() : senderKeypair.publicKey();
+        const account = await server.loadAccount(sourcePublicKey);
         
         let fee;
         if(useAutomaticFee) {
@@ -44,8 +34,8 @@ const initiateTransaction = async (sponsorKeypair, senderKeypair, recipientAddre
             fee = parseInt(customFee * 10000000);
         }
 
-        const numOperations = 2 * recordsPerAttempt;
-        const totalFee = (1.25 * parseInt(fee) * numOperations).toString();
+        const numOperations = doClaim ? 2 * recordsPerAttempt : 1 * recordsPerAttempt;
+        const totalFee = (parseInt(fee) * numOperations).toString();
         
         const tx = new TransactionBuilder(account, {
             fee: totalFee,
@@ -63,12 +53,12 @@ const initiateTransaction = async (sponsorKeypair, senderKeypair, recipientAddre
                 destination: recipientAddress,
                 asset: Asset.native(),
                 amount: amount.toString(),
-                source: senderKeypair.publicKey()
+                source: doClaim || useSponsor ? senderKeypair.publicKey() : undefined
             };
             tx.addOperation(Operation.payment(paymentOp));
         }
 
-        const transaction = tx.setTimeout(doClaim ? 60 * recordsPerAttempt : 30 * recordsPerAttempt).build();
+        const transaction = tx.setTimeout(60).build();
 
         if (useSponsor) {
             transaction.sign(sponsorKeypair);
@@ -79,67 +69,60 @@ const initiateTransaction = async (sponsorKeypair, senderKeypair, recipientAddre
         return { isSuccess: true, result };
 
     } catch (error) {
-        console.error("Transaction failed in backend:", error.response ? error.response.data : error.message);
         return { isSuccess: false, error };
     }
 };
 
-// Netlify Function का मेन हैंडलर
 exports.handler = async (event) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ message: "Method Not Allowed" })};
     }
 
     try {
-        // फ्रंटएंड से भेजे गए डेटा को लें
-        const {
-            senderMnemonic,
-            sponsorMnemonic,
-            receiverAddress,
-            claimableId,
-            feeType,
-            recordsPerAttempt,
-            amount,
-            operation,
-            feeMechanism,
-            customFee
-        } = JSON.parse(event.body);
-
-        // की-पेयर बनाएँ
-        const senderKeypair = createKeypairFromMnemonic(senderMnemonic);
+        const params = JSON.parse(event.body);
+        const senderKeypair = createKeypairFromMnemonic(params.senderMnemonic);
         let sponsorKeypair = null;
-        if (feeType === 'SPONSOR_PAYS' && sponsorMnemonic) {
-            sponsorKeypair = createKeypairFromMnemonic(sponsorMnemonic);
+        if (params.feeType === 'SPONSOR_PAYS' && params.sponsorMnemonic) {
+            sponsorKeypair = createKeypairFromMnemonic(params.sponsorMnemonic);
         }
 
-        const useSponsor = feeType === 'SPONSOR_PAYS';
-        const doClaim = operation === 'claim_and_transfer';
-        const useAutomaticFee = feeMechanism === 'AUTOMATIC';
-
-        // ट्रांजैक्शन फंक्शन को कॉल करें
         const txResult = await initiateTransaction(
             sponsorKeypair,
             senderKeypair,
-            receiverAddress,
-            claimableId,
-            amount,
-            recordsPerAttempt,
-            customFee,
-            useAutomaticFee,
-            useSponsor,
-            doClaim
+            params.receiverAddress,
+            params.claimableId,
+            params.amount,
+            params.recordsPerAttempt,
+            params.customFee,
+            params.feeMechanism === 'AUTOMATIC',
+            params.feeType === 'SPONSOR_PAYS',
+            params.operation === 'claim_and_transfer'
         );
 
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ success: txResult.isSuccess, response: txResult.isSuccess ? txResult.result : txResult.error.response.data.extras.result_codes })
-        };
+        // ▼▼▼ यहाँ हमने लॉजिक को ठीक किया है ▼▼▼
+        const isTrulySuccessful = txResult.isSuccess && txResult.result && txResult.result.hash;
+
+        if (isTrulySuccessful) {
+            // असली सफलता तभी भेजें जब हैश मिला हो
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ success: true, response: txResult.result })
+            };
+        } else {
+            // वरना, विफलता का कारण भेजें
+            const errorDetails = txResult.error?.response?.data?.extras?.result_codes || txResult.error?.message || "Unknown transaction error";
+            return {
+                statusCode: 200, // हम 200 भेज रहे हैं क्योंकि यह सर्वर एरर नहीं है, बल्कि ट्रांजैक्शन एरर है
+                body: JSON.stringify({ success: false, error: errorDetails })
+            };
+        }
 
     } catch (error) {
-        console.error("Handler Error:", error);
+        // यह तब चलेगा जब कोड में ही कोई और बड़ी गलती हो
+        console.error("Critical Handler Error:", error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ success: false, error: error.message })
+            body: JSON.stringify({ success: false, error: "A critical error occurred in the backend function." })
         };
     }
 };
