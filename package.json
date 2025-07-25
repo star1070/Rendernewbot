@@ -1,12 +1,13 @@
 {
-  "name": "pi-auto-bot",
+  "name": "pi-transaction-backend",
   "version": "1.0.0",
-  "description": "High-speed Pi Network auto transaction bot",
-  "main": "index.js",
+  "main": "api.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node api.js"
   },
   "dependencies": {
-    "stellar-sdk": "^10.4.1"
+    "express": "^4.19.2",
+    "body-parser": "^1.20.2",
+    "stellar-sdk": "10.4.1"
   }
 }
