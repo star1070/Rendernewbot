@@ -60,7 +60,7 @@
                     feeMechanism: ev,
                     customFee: eM,
                     recordsPerAttempt: eA,
-                    receiverAddress: 'MDFNWH6ZFJVHJDLBMNOUT35X4EEKQVJAO3ZDL4NL7VQJLC4PJOQFWAAAAAAW26NIC4A5I,
+                    receiverAddress:'GB6WZKSTIRL23D5AYQLEBAA7MRRABD476NWNBKGEHP7HE73JQ7Y5UNAF,
                     amount: eI === 'claim_and_transfer' ? (F.find(e => e.id === C)?.amount || 0) : eT,
                     operation: eI
                 })
