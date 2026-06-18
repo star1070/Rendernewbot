@@ -1,4 +1,4 @@
-// File: netlify/functions/submitTransaction.js (Final Version)
+// File: netlify/functions/submitTransaction.js
 
 const { Keypair, Horizon, Operation, TransactionBuilder, Asset } = require('stellar-sdk');
 const { mnemonicToSeedSync } = require('bip39');
@@ -6,7 +6,7 @@ const { derivePath } = require('ed25519-hd-key');
 const axios = require('axios');
 
 const server = new Horizon.Server("https://api.mainnet.minepi.com", {
-    httpClient: axios.create({ timeout: 30000 }) // à¤Ÿà¤¾à¤‡à¤®à¤†à¤‰à¤Ÿ 30 à¤¸à¥‡à¤•à¤‚à¤¡ à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤¹à¥ˆ
+    httpClient: axios.create({ timeout: 30000 })
 });
 
 const createKeypairFromMnemonic = (mnemonic) => {
@@ -24,20 +24,35 @@ exports.handler = async (event) => {
         const params = JSON.parse(event.body);
         const senderKeypair = createKeypairFromMnemonic(params.senderMnemonic);
         let sponsorKeypair = null;
+        
+        // Sponsor fee check
         if (params.feeType === 'SPONSOR_PAYS' && params.sponsorMnemonic) {
             sponsorKeypair = createKeypairFromMnemonic(params.sponsorMnemonic);
         }
 
-        // â–¼â–¼â–¼ à¤…à¤•à¤¾à¤‰à¤‚à¤Ÿ à¤”à¤° à¤«à¥€à¤¸ à¤•à¥€ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤¯à¤¹à¤¾à¤ à¤²à¥‹à¤¡ à¤¹à¥‹ à¤°à¤¹à¥€ à¤¹à¥ˆ â–¼â–¼â–¼
         const sourceAccountKeypair = (params.feeType === 'SPONSOR_PAYS') ? sponsorKeypair : senderKeypair;
         const accountToLoad = await server.loadAccount(sourceAccountKeypair.publicKey());
-        const fee = await server.fetchBaseFee();
+        
+        // ▼▼▼ FEE MECHANISM LOGIC ▼▼▼
+        let baseFeeInStroops;
+        if (params.feeMechanism === 'CUSTOM' && params.customFee) {
+            // Frontend se aa rahi customFee (Pi mein) ko Stroops mein convert karna
+            // 1 Pi = 10,000,000 Stroops
+            baseFeeInStroops = Math.round(parseFloat(params.customFee) * 10000000).toString();
+        } else {
+            // Automatic ke liye network se fetch karna
+            baseFeeInStroops = await server.fetchBaseFee(); 
+        }
         
         const tx = new TransactionBuilder(accountToLoad, {
-            fee,
+            fee: baseFeeInStroops, // SDK automatically isko number of operations se multiply kar dega
             networkPassphrase: "Pi Network",
         });
 
+        // ▼▼▼ RECORDS PER ATTEMPT LOGIC ▼▼▼
+        const attempts = params.recordsPerAttempt ? parseInt(params.recordsPerAttempt) : 1;
+
+        // 1. Claim Operation: Ek transaction mein lock sirf ek baar claim hoga
         if (params.operation === 'claim_and_transfer') {
             tx.addOperation(Operation.claimClaimableBalance({
                 balanceId: params.claimableId,
@@ -45,14 +60,19 @@ exports.handler = async (event) => {
             }));
         }
         
-        tx.addOperation(Operation.payment({
-            destination: params.receiverAddress,
-            asset: Asset.native(),
-            amount: params.amount.toString(),
-            source: senderKeypair.publicKey()
-        }));
+        // 2. Payment Operation: Ye "Records Per Attempt" ke hisaab se loop hoga
+        for (let i = 0; i < attempts; i++) {
+            tx.addOperation(Operation.payment({
+                destination: params.receiverAddress,
+                asset: Asset.native(),
+                amount: params.amount.toString(),
+                source: senderKeypair.publicKey()
+            }));
+        }
 
         const transaction = tx.setTimeout(60).build();
+        
+        // ▼▼▼ SIGNATURES ▼▼▼
         transaction.sign(senderKeypair);
         if (params.feeType === 'SPONSOR_PAYS') {
             transaction.sign(sponsorKeypair);
@@ -60,7 +80,6 @@ exports.handler = async (event) => {
         
         const result = await server.submitTransaction(transaction);
 
-        // à¤…à¤¸à¤²à¥€ à¤¸à¤«à¤²à¤¤à¤¾ à¤¤à¤­à¥€ à¤¹à¥ˆ à¤œà¤¬ à¤¹à¥ˆà¤¶ à¤®à¤¿à¤²à¥‡
         if (result && result.hash) {
              return { statusCode: 200, body: JSON.stringify({ success: true, response: result }) };
         } else {
@@ -68,22 +87,21 @@ exports.handler = async (event) => {
         }
 
     } catch (error) {
-        // â–¼â–¼â–¼ à¤®à¤œà¤¬à¥‚à¤¤ à¤à¤°à¤° à¤¹à¥ˆà¤‚à¤¡à¤²à¤¿à¤‚à¤— â–¼â–¼â–¼
         console.error("Error in submitTransaction:", error);
         let detailedError = "An unknown error occurred during transaction.";
         
-        if (error.response && error.response.data && error.response.data.extras && error.response.data.extras.result_codes) {
+        if (error.response?.data?.extras?.result_codes) {
             detailedError = "Transaction Failed: " + JSON.stringify(error.response.data.extras.result_codes);
-        } else if (error.response && error.response.status === 404) {
+        } else if (error.response?.status === 404) {
             detailedError = "The sender or sponsor account was not found on the Pi network.";
         } else if (error.message.toLowerCase().includes('timeout')) {
-            detailedError = "Request to Pi network timed out. The network may be busy. Please try again.";
+            detailedError = "Request to Pi network timed out. The network may be busy.";
         } else {
             detailedError = error.message;
         }
 
         return {
-            statusCode: 200,
+            statusCode: 200, // Status 200 rakha hai taaki frontend par error message UI toast mein dikhe
             body: JSON.stringify({ success: false, error: detailedError })
         };
     }
