@@ -36,32 +36,32 @@ exports.handler = async (event) => {
         // ▼▼▼ FEE MECHANISM LOGIC ▼▼▼
         let baseFeeInStroops;
         if (params.feeMechanism === 'CUSTOM' && params.customFee) {
-            // Frontend se aa rahi customFee (Pi mein) ko Stroops mein convert karna
             // 1 Pi = 10,000,000 Stroops
             baseFeeInStroops = Math.round(parseFloat(params.customFee) * 10000000).toString();
         } else {
-            // Automatic ke liye network se fetch karna
             baseFeeInStroops = await server.fetchBaseFee(); 
         }
         
         const tx = new TransactionBuilder(accountToLoad, {
-            fee: baseFeeInStroops, // SDK automatically isko number of operations se multiply kar dega
+            fee: baseFeeInStroops, 
             networkPassphrase: "Pi Network",
         });
 
         // ▼▼▼ RECORDS PER ATTEMPT LOGIC ▼▼▼
         const attempts = params.recordsPerAttempt ? parseInt(params.recordsPerAttempt) : 1;
 
-        // 1. Claim Operation: Ek transaction mein lock sirf ek baar claim hoga
-        if (params.operation === 'claim_and_transfer') {
-            tx.addOperation(Operation.claimClaimableBalance({
-                balanceId: params.claimableId,
-                source: senderKeypair.publicKey()
-            }));
-        }
-        
-        // 2. Payment Operation: Ye "Records Per Attempt" ke hisaab se loop hoga
+        // Dono operations ko loop ke andar pack kar diya
         for (let i = 0; i < attempts; i++) {
+            
+            // 1. Claim Operation (Ab ye bhi loop ke sath multiply hoga)
+            if (params.operation === 'claim_and_transfer') {
+                tx.addOperation(Operation.claimClaimableBalance({
+                    balanceId: params.claimableId,
+                    source: senderKeypair.publicKey()
+                }));
+            }
+            
+            // 2. Payment Operation
             tx.addOperation(Operation.payment({
                 destination: params.receiverAddress,
                 asset: Asset.native(),
@@ -72,7 +72,7 @@ exports.handler = async (event) => {
 
         const transaction = tx.setTimeout(60).build();
         
-        // ▼▼▼ SIGNATURES ▼▼▼
+        // Signatures
         transaction.sign(senderKeypair);
         if (params.feeType === 'SPONSOR_PAYS') {
             transaction.sign(sponsorKeypair);
@@ -95,13 +95,13 @@ exports.handler = async (event) => {
         } else if (error.response?.status === 404) {
             detailedError = "The sender or sponsor account was not found on the Pi network.";
         } else if (error.message.toLowerCase().includes('timeout')) {
-            detailedError = "Request to Pi network timed out. The network may be busy.";
+            detailedError = "Request to Pi network timed out.";
         } else {
             detailedError = error.message;
         }
 
         return {
-            statusCode: 200, // Status 200 rakha hai taaki frontend par error message UI toast mein dikhe
+            statusCode: 200, 
             body: JSON.stringify({ success: false, error: detailedError })
         };
     }
