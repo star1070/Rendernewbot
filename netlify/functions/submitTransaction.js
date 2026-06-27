@@ -32,13 +32,10 @@ exports.handler = async (event) => {
         const sourceAccountKeypair = (params.feeType === 'SPONSOR_PAYS') ? sponsorKeypair : senderKeypair;
         const accountToLoad = await server.loadAccount(sourceAccountKeypair.publicKey());
         
-        // ▼▼▼ Ekdum straight Fee logic (No extra smart math) ▼▼▼
         let baseFeeInStroops;
         if (params.feeMechanism === 'CUSTOM' && params.customFee) {
-            // Tu UI me 0.01 likhega -> ye seedha usko official 100,000 stroops banayega
             baseFeeInStroops = Math.round(parseFloat(params.customFee) * 10000000).toString();
         } else {
-            // Automatic pe network ka default 100,000 stroops (0.01 Pi) uthayega
             baseFeeInStroops = await server.fetchBaseFee(); 
         }
         
@@ -49,15 +46,16 @@ exports.handler = async (event) => {
 
         const attempts = params.recordsPerAttempt ? parseInt(params.recordsPerAttempt) : 1;
 
-        // Loop ke andar dono operation
+        // ▼▼▼ FIX 1: CLAIM SIRF EK BAAR HOGA (Loop se bahar) ▼▼▼
+        if (params.operation === 'claim_and_transfer') {
+            tx.addOperation(Operation.claimClaimableBalance({
+                balanceId: params.claimableId,
+                source: senderKeypair.publicKey()
+            }));
+        }
+        
+        // ▼▼▼ FIX 2: LOOP ME SIRF PAYMENT GHUMEGI ▼▼▼
         for (let i = 0; i < attempts; i++) {
-            if (params.operation === 'claim_and_transfer') {
-                tx.addOperation(Operation.claimClaimableBalance({
-                    balanceId: params.claimableId,
-                    source: senderKeypair.publicKey()
-                }));
-            }
-            
             tx.addOperation(Operation.payment({
                 destination: params.receiverAddress,
                 asset: Asset.native(),
@@ -89,8 +87,6 @@ exports.handler = async (event) => {
             detailedError = "Transaction Failed: " + JSON.stringify(error.response.data.extras.result_codes);
         } else if (error.response?.status === 404) {
             detailedError = "Account not found on the Pi network.";
-        } else if (error.message.toLowerCase().includes('timeout')) {
-            detailedError = "Request timed out.";
         } else {
             detailedError = error.message;
         }
